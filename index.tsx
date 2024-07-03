@@ -69,7 +69,7 @@ export default definePlugin({
             match: /(?<=\.stickerInspected\])(.+?),onClick:(\w+)=>\{/,
             replace: (_, stuff, event) => {
                 return `${stuff},onClick:${event}=>{` +
-                    `if(${event}.shiftKey){Vencord.Plugins.plugins.multistickers.shiftEvent.set()};`;
+                    `if(${event}.shiftKey){$self.shiftEvent.set()};`;
             }
         }
     },
@@ -77,14 +77,14 @@ export default definePlugin({
         find: ".stickers,previewSticker:",
         replacement: {
             match: /(getUploadCount.+?0)/,
-            replace: "$1||Vencord.Plugins.plugins.multistickers.shiftEvent.get(\"attach\")",
+            replace: "$1||$self.shiftEvent.get(\"attach\")",
         }
     },
     {
         find: "name:\"expression-picker-last-active-view\"",
         replacement: {
             match: /(?=name:"expression-picker-last-active-view")(.+?=>.+?=>.+?=>\{)/,
-            replace: "$1if(Vencord.Plugins.plugins.multistickers.shiftEvent.get(\"close\"))return;"
+            replace: "$1if($self.shiftEvent.get(\"close\"))return;"
         }
     }],
 
