@@ -21,26 +21,11 @@ export default definePlugin({
         find: "StickerMessagePreviewStore",
         replacement: [{
             match: /ADD_STICKER_PREVIEW:function\((\w+).+?===(\w+\.\w+)\.FirstThreadMessage\?(\S+?):(\w+).+?\}/,
-            replace: (_, event, constants, threadStore, store) => {
-                return `ADD_STICKER_PREVIEW:function(${event}){` +
-                    `const _c=${event}.channelId` +
-                    `,_s=${event}.draftType===${constants}.FirstThreadMessage?${threadStore}:${store};` +
-                    `_s[_c]=_s[_c]?.filter((_x)=>_x.id!==${event}.sticker.id);` +
-                    "if(_s[_c]?.length===3){_s[_c].shift()};" +
-                    `_s[_c]=[..._s[_c]??[],${event}.sticker]` +
-                    "}";
-            },
+            replace: "ADD_STICKER_PREVIEW: function($1) { $self.storeAddStickerPreview($1,$2,$3,$4) }",
         },
         {
             match: /CLEAR_STICKER_PREVIEW:function\((\w+).+?(\w+\.\w+).FirstThreadMessage\?(\S+?):(\w+).+?\}/,
-            replace: (_, event, constants, threadStore, store) => {
-                return `CLEAR_STICKER_PREVIEW:function(${event}){` +
-                    `const _c=${event}.channelId,` +
-                    `_s=${event}.draftType===${constants}.FirstThreadMessage?${threadStore}:${store};` +
-                    `if(${event}.stickerId){_s[_c]=_s[_c]?.filter((_x)=>_x.id!==${event}.stickerId);return;}` +
-                    "null!=_s[_c]&&delete _s[_c]" +
-                    "}";
-            }
+            replace: "CLEAR_STICKER_PREVIEW: function($1) { $self.storeClearStickerPreview($1,$2,$3,$4) }",
         }],
     },
     {
@@ -57,9 +42,7 @@ export default definePlugin({
         replacement: {
             match: /function (\w+)\(\w+,\w+\)\{(\w+\.\w+)\.dispatch.+?\}\)\}/,
             replace: (_, name, Dispatch) => {
-                return `function ${name}(_c, _t, _s){` +
-                    `${Dispatch}.dispatch({type:"CLEAR_STICKER_PREVIEW",channelId:_c,draftType:_t,stickerId:_s})` +
-                    "}";
+                return `function ${name}(channelId, draftType, stickerId) { ${Dispatch}.dispatch({ type: "CLEAR_STICKER_PREVIEW", channelId, draftType, stickerId }) }`;
             }
         }
     },
@@ -69,7 +52,7 @@ export default definePlugin({
             match: /(?<=\.stickerInspected\])(.+?),onClick:(\w+)=>\{/,
             replace: (_, stuff, event) => {
                 return `${stuff},onClick:${event}=>{` +
-                    `if(${event}.shiftKey){$self.shiftEvent.set()};`;
+                    `if (${event}.shiftKey) $self.shiftEvent.set();`;
             }
         }
     },
@@ -77,16 +60,33 @@ export default definePlugin({
         find: ".stickers,previewSticker:",
         replacement: {
             match: /(getUploadCount.+?0)/,
-            replace: "$1||$self.shiftEvent.get(\"attach\")",
+            replace: '$1 || $self.shiftEvent.get("attach")',
         }
     },
     {
         find: "name:\"expression-picker-last-active-view\"",
         replacement: {
             match: /(?=name:"expression-picker-last-active-view")(.+?=>.+?=>.+?=>\{)/,
-            replace: "$1if($self.shiftEvent.get(\"close\"))return;"
+            replace: "$1 if ($self.shiftEvent.get(\"close\")) return;"
         }
     }],
+
+    storeAddStickerPreview: function (event, constants, threadStore, store) {
+        const { channelId, draftType } = event;
+        const storeToUse = draftType === constants.FirstThreadMessage ? threadStore : store;
+
+        storeToUse[channelId] = storeToUse[channelId]?.filter(x => x.id !== event.sticker.id);
+        if (storeToUse[channelId]?.length === 3) storeToUse[channelId].shift();
+        storeToUse[channelId] = [...storeToUse[channelId] ?? [], event.sticker];
+    },
+
+    storeClearStickerPreview: function (event, constants, threadStore, store) {
+        const { channelId, draftType, stickerId } = event;
+        const storeToUse = draftType === constants.FirstThreadMessage ? threadStore : store;
+
+        if (stickerId) return void (storeToUse[channelId] = storeToUse[channelId]?.filter(x => x.id !== stickerId));
+        if (storeToUse[channelId] !== null) delete storeToUse[channelId];
+    },
 
     shiftEvent: {
         shouldNotClose: false,
@@ -95,7 +95,7 @@ export default definePlugin({
             this.shouldNotClose = true;
             this.shouldAttach = true;
         },
-        get(type) {
+        get(type: string) {
             let ret = false;
             switch (type) {
                 case "attach":
